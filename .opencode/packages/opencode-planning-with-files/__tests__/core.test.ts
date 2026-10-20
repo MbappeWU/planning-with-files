@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   BANNER,
   ambiguityNotice,
+  attestationPathFor,
   buildContext,
   checkComplete,
   countSelectablePlans,
@@ -20,6 +21,7 @@ import {
   slugIsValid,
   summarizeStatus,
   verifyPlan,
+  writeAttestation,
 } from "../src/core.js"
 
 const GATED_PLAN = [
@@ -432,5 +434,72 @@ describe("init and status", () => {
     expect(fs.readFileSync(path.join(root, "task_plan.md"), "utf8")).toContain("FROM SKILL")
     expect(fs.readFileSync(path.join(root, "findings.md"), "utf8")).toContain("# Findings")
     expect(initPlan(root, { mode: "turbo" }, env).ok).toBe(false)
+  })
+})
+
+describe("status attestation validity (#330)", () => {
+  function expectCurrentAttestation(planDir: string) {
+    const planFile = path.join(planDir, "task_plan.md")
+    const markerFile = attestationPathFor(root, planDir)
+
+    const legacy = summarizeStatus(root, env)
+    expect(legacy.mode).toBe("legacy")
+    expect(legacy.attested).toBe(false)
+    expect(legacy.attestationValid).toBe(false)
+
+    fs.writeFileSync(path.join(planDir, ".mode"), "autonomous\n")
+    writeAttestation(root, planDir)
+    const current = summarizeStatus(root, env)
+    expect(current.attested).toBe(true)
+    expect(current.attestationValid).toBe(true)
+    expect(buildContext(root, planDir)).toContain("Build the adapter")
+    expect(buildContext(root, planDir)).not.toContain("context blocked")
+
+    const planBytes = fs.readFileSync(planFile)
+    const markerBytes = fs.readFileSync(markerFile)
+    summarizeStatus(root, env)
+    expect(fs.readFileSync(planFile).equals(planBytes)).toBe(true)
+    expect(fs.readFileSync(markerFile).equals(markerBytes)).toBe(true)
+
+    fs.appendFileSync(planFile, "\n- edited\n")
+    const stale = summarizeStatus(root, env)
+    expect(stale.attested).toBe(true)
+    expect(stale.attestationValid).toBe(false)
+    expect(buildContext(root, planDir)).toBe("[planning-with-files] context blocked: PLAN TAMPERED")
+    const stalePlan = fs.readFileSync(planFile)
+    const staleMarker = fs.readFileSync(markerFile)
+    summarizeStatus(root, env)
+    expect(fs.readFileSync(planFile).equals(stalePlan)).toBe(true)
+    expect(fs.readFileSync(markerFile).equals(staleMarker)).toBe(true)
+
+    fs.writeFileSync(markerFile, "not-a-digest\n")
+    const malformed = summarizeStatus(root, env)
+    expect(malformed.attested).toBe(true)
+    expect(malformed.attestationValid).toBe(false)
+    expect(buildContext(root, planDir)).toBe(
+      "[planning-with-files] context blocked: malformed plan attestation",
+    )
+
+    writeAttestation(root, planDir)
+    const restored = summarizeStatus(root, env)
+    expect(restored.attested).toBe(true)
+    expect(restored.attestationValid).toBe(true)
+    expect(fs.readFileSync(markerFile, "utf8").trim()).toBe(sha(planFile))
+    expect(buildContext(root, planDir)).toContain("Build the adapter")
+    expect(buildContext(root, planDir)).not.toContain("context blocked")
+  }
+
+  it("reports a root .plan-attestation as current only while it matches task_plan.md", () => {
+    fs.writeFileSync(path.join(root, "task_plan.md"), GATED_PLAN)
+    expect(attestationPathFor(root, root)).toBe(path.join(root, ".plan-attestation"))
+    expectCurrentAttestation(root)
+    expect(summarizeStatus(root, env).plan_id).toBe("root")
+  })
+
+  it("reports a named-plan .attestation as current only while it matches task_plan.md", () => {
+    const dir = slugPlan(root, "2026-09-02-run", { pointer: true })
+    expect(attestationPathFor(root, dir)).toBe(path.join(dir, ".attestation"))
+    expectCurrentAttestation(dir)
+    expect(summarizeStatus(root, env).plan_id).toBe("2026-09-02-run")
   })
 })
