@@ -799,6 +799,7 @@ export type StatusResult = {
   plan_id?: string
   mode?: string
   attested?: boolean
+  attestationValid?: boolean
   current_phase?: string
   counts?: ReturnType<typeof gateCounts>
   conflicts?: string[]
@@ -828,13 +829,15 @@ export function summarizeStatus(root: string, env: Env): StatusResult {
   }
   const text = readText(path.join(resolved.planDir, "task_plan.md")) ?? ""
   const tokens = modeTokens(root, resolved.planDir)
+  const attested = isRegularFile(attestationPathFor(root, resolved.planDir))
   return {
     exists: true,
     project_dir: root,
     plan_dir: resolved.planDir,
     plan_id: planIdFor(root, resolved.planDir),
     mode: tokens && tokens.length ? tokens.join(" ") : tokens === null ? "invalid" : "legacy",
-    attested: isRegularFile(attestationPathFor(root, resolved.planDir)),
+    attested,
+    attestationValid: attested && verifyPlan(root, resolved.planDir).ok,
     current_phase: extractCurrentPhase(text),
     counts: gateCounts(text),
     conflicts,
