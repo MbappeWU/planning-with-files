@@ -3,16 +3,16 @@
 The Cursor UserPromptSubmit hooks can still hit the issue #212 failure in the
 legacy-root shape: a root task_plan.md at a shared parent cwd plus a nested
 project below it carrying its own .planning plan. The PowerShell route also
-resolves named plans through resolve-plan-dir.ps1; the shell route retains its
-legacy-root-only behavior. Shared semantics:
+resolves named plans through resolve-plan-dir.ps1; the bash route does the same
+through resolve-plan-dir.sh (#336). Shared semantics:
 
   * PWF_PLAN_ROOT — every planning-state read goes through the pin; a
     broken pin fails CLOSED with one notice; unset stays byte-identical.
   * Depth-1 nested-root conflict detection — the legacy root plan is always
     a cwd GUESS on this route, so a competing direct-child .planning
     (.active_plan or a <slug>/task_plan.md) refuses injection with the
-    warning. The PowerShell warning may also advertise PLAN_ID because that
-    route now implements the named-plan selector.
+    warning. Both routes advertise PLAN_ID as well as PWF_PLAN_ROOT because
+    each implements the named-plan selector.
 
 Legacy-root scenarios run against both interpreters through a shared contract;
 PowerShell's named-plan capability is asserted explicitly where the routes now
@@ -160,6 +160,8 @@ class CursorHookContract:
 
 @unittest.skipUnless(have_sh(), "requires a POSIX sh")
 class CursorShNestedRootTests(CursorHookContract, unittest.TestCase):
+    SUPPORTS_NAMED_PLAN_PIN = True
+
     def _run(self, env_extra: dict | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["sh", str(CURSOR_SH)],

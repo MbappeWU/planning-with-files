@@ -50,8 +50,11 @@ nothing is injected until it is set; a stale pointer falls through to the
 root `task_plan.md` like `inject-plan.sh`, while a pointer that is a directory
 or a link fails closed. Each refusal prints one notice naming the cause.
 
-The bash hooks (`hooks.json`) read only the root `task_plan.md`; a plan created
-with `init-session.sh <name>` is not injected on that route.
+The bash hooks (`hooks.json`) resolve the same selected plan directory as the
+PowerShell route, through `.cursor/hooks/resolve-plan-dir.sh` (a thin forwarder
+onto the skill-owned `resolve-plan-dir.sh`). An explicit `PLAN_ID` selects
+`.planning/<slug>/` even when a root `task_plan.md` exists; a missing or unsafe
+`PLAN_ID` fails closed rather than injecting the root plan.
 
 Two differences from the Claude Code and Codex routes are deliberate. Session
 isolation (`.planning/sessions/` with `.attached` markers) is not implemented on
